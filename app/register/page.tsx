@@ -23,26 +23,30 @@ export default function RegisterPage() {
     }
     setBusy(true);
     try {
-      const { data, error: authError } = await supabase.auth.signUp({ email: form.email.trim(), password: form.password, options: { data: { full_name: form.full_name.trim() } } });
-      if (authError) throw authError;
-      if (!data.user) throw new Error("Account creation did not complete. Please try again.");
-      if (!data.session) {
-        setMessage("Account created. Check your inbox and verify your email, then sign in to submit your student verification request.");
-      } else {
-        const { error: insertError } = await supabase.from("student_registration_requests").insert({
-          user_id: data.user.id,
-          full_name: form.full_name.trim(),
-          student_id: form.student_id.trim(),
-          email: form.email.trim().toLowerCase(),
-          phone: form.phone.trim(),
-          academic_year: form.academic_year,
-          branch: form.branch.trim(),
-          preferred_bus_stop: form.preferred_bus_stop.trim(),
-          emergency_contact: form.emergency_contact.trim(),
-        });
-        if (insertError) throw insertError;
-        setMessage("Registration submitted. Your Student ID is awaiting manual admin review. Bus assignment is controlled by the college admin.");
+      let user = (await supabase.auth.getUser()).data.user;
+      if (!user) {
+        const { data, error: authError } = await supabase.auth.signUp({ email: form.email.trim(), password: form.password, options: { data: { full_name: form.full_name.trim() } } });
+        if (authError) throw authError;
+        user = data.user;
+        if (!user) throw new Error("Account creation did not complete. Please try again.");
+        if (!data.session) {
+          setMessage("Account created. Verify your email, then sign in and return to this form to submit your Student ID and transport details. No student request has been stored yet.");
+          return;
+        }
       }
+      const { error: insertError } = await supabase.from("student_registration_requests").insert({
+        user_id: user.id,
+        full_name: form.full_name.trim(),
+        student_id: form.student_id.trim(),
+        email: (user.email || form.email).trim().toLowerCase(),
+        phone: form.phone.trim(),
+        academic_year: form.academic_year,
+        branch: form.branch.trim(),
+        preferred_bus_stop: form.preferred_bus_stop.trim(),
+        emergency_contact: form.emergency_contact.trim(),
+      });
+      if (insertError) throw insertError;
+      setMessage("Registration submitted. Your Student ID is awaiting manual admin review. Bus assignment is controlled by the college admin.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register right now.");
     } finally { setBusy(false); }
