@@ -1,0 +1,15 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase, supabaseConfigured } from "../../lib/supabase";
+import "../register/register.css";
+
+type RequestRow = { full_name:string; student_id:string; academic_year:string; branch:string; status:string; preferred_bus_stop:string; assigned_bus?:string|null; assigned_route?:string|null };
+export default function StudentPage(){
+ const [row,setRow]=useState<RequestRow|null>(null);const [email,setEmail]=useState("");const [error,setError]=useState("");const [loading,setLoading]=useState(true);const router=useRouter();
+ useEffect(()=>{let live=true;(async()=>{if(!supabaseConfigured||!supabase){setError("Supabase connection is not configured yet.");setLoading(false);return;}const {data:{user},error:authError}=await supabase.auth.getUser();if(authError||!user){router.replace("/login");return;}if(live)setEmail(user.email||"");const {data,error:queryError}=await supabase.from("student_registration_requests").select("full_name,student_id,academic_year,branch,status,preferred_bus_stop,assigned_bus,assigned_route").eq("user_id",user.id).maybeSingle();if(!live)return;if(queryError)setError("We couldn't load your request. If you have not submitted your Student ID after verifying your email, return to registration or contact the admin.");else if(!data)setError("Your account is signed in, but no Student ID request was found yet. Complete registration or contact the admin.");else setRow(data as RequestRow);setLoading(false);})();return()=>{live=false}},[router]);
+ async function signOut(){if(supabase)await supabase.auth.signOut();router.push("/login");}
+ return <main className="reg-shell"><section className="reg-brand"><div className="reg-logo">R</div><p className="reg-eyebrow">ROUTE-IQ · STUDENT PORTAL</p><h1>Your transport,<br/><span>your status.</span></h1><p className="reg-intro">Student access and bus assignments are managed by your college's authorized transport admin.</p></section><section className="reg-panel"><div className="reg-panel-head"><p className="reg-eyebrow">ACCOUNT</p><h2>Student status</h2><p>{email}</p></div>{loading?<p>Loading your status…</p>:error?<div className="reg-alert">{error}</div>:row&&<><div className="reg-success">Verification status: <strong>{row.status}</strong></div><div className="reg-status-card"><p><b>Student</b><br/>{row.full_name}</p><p><b>Student ID</b><br/>{row.student_id}</p><p><b>Academic year & branch</b><br/>{row.academic_year} · {row.branch}</p><p><b>Preferred stop</b><br/>{row.preferred_bus_stop}</p><p><b>Assigned bus</b><br/>{row.assigned_bus||"Pending admin assignment"}</p><p><b>Assigned route</b><br/>{row.assigned_route||"Pending admin assignment"}</p>{row.status!=="approved"&&<p>Your transport dashboard will be available after an authorized admin approves your Student ID.</p>}</div></>}<p className="reg-foot"><Link href="/register">Registration</Link> · <button onClick={signOut} style={{border:0,background:"none",color:"#315ce8",fontWeight:700,cursor:"pointer"}}>Sign out</button></p></section></main>;
+}
