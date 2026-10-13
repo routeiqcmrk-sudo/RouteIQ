@@ -23,16 +23,32 @@ create table if not exists public.student_registration_requests (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists student_registration_requests_student_id_lower_idx
+-- Multiple pending submissions may exist so nobody can block a real student by
+-- claiming their ID first. Admins must resolve duplicates before approval.
+create index if not exists student_registration_requests_student_id_lower_idx
   on public.student_registration_requests (lower(student_id));
 
 create or replace function public.routeiq_is_admin()
 returns boolean
 language sql
 stable
-as $$
+as $
   select coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false);
-$$;
+$;
+
+create or replace function public.routeiq_email_is_verified()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $
+  select exists (
+    select 1 from auth.users u
+    where u.id = (select auth.uid())
+      and u.email_confirmed_at is not null
+  );
+$;
 
 alter table public.student_registration_requests enable row level security;
 
@@ -42,7 +58,7 @@ create policy "student can submit own request"
   with check (
     auth.uid() = user_id
     and coalesce(auth.jwt() ->> 'email', '') = email
-    and coalesce(auth.jwt() ->> 'email_verified', 'false') = 'true'
+    and public.routeiq_email_is_verified()
     and status = 'pending'
     and assigned_bus is null
     and assigned_route is null
